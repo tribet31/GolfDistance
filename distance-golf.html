@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Distance au trou</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Idée : une carte de score lisible en plein soleil. Fond clair, encre vert sapin,
+   un seul accent rouge fanion, le chiffre de distance occupe l'écran. */
+:root{
+  color-scheme: light;
+  --paper:#f3f5ee;
+  --card:#ffffff;
+  --ink:#12301f;
+  --muted:#5b6b60;
+  --line:#d3dacb;
+  --green:#1d6b3c;
+  --flag:#c8321f;
+  --ok:#1d6b3c;
+  --warn:#a36200;
+  --bad:#b3261e;
+  --display:"Barlow Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--body);font-size:17px;line-height:1.4;
+  -webkit-text-size-adjust:100%;
+}
+.app{
+  max-width:520px;margin:0 auto;min-height:100%;
+  padding:16px 16px calc(24px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:16px;
+}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.02em;margin:0;text-transform:uppercase}
+.units{display:flex;border:2px solid var(--ink);border-radius:999px;overflow:hidden}
+.units button{
+  font:600 15px var(--body);border:0;background:transparent;color:var(--ink);
+  padding:6px 14px;min-height:36px;cursor:pointer;
+}
+.units button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+
+.gps{
+  display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;
+  color:var(--muted);
+}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--line);flex:none}
+.gps[data-state="ok"] .dot{background:var(--ok)}
+.gps[data-state="warn"] .dot{background:var(--warn)}
+.gps[data-state="bad"] .dot{background:var(--bad)}
+.gps[data-state="ok"]{color:var(--ok)}
+.gps[data-state="warn"]{color:var(--warn)}
+.gps[data-state="bad"]{color:var(--bad)}
+
+.readout{
+  background:var(--card);border:2px solid var(--ink);border-radius:14px;
+  padding:20px 16px 18px;text-align:center;position:relative;
+}
+.readout .label{
+  font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+}
+.num{
+  font-family:var(--display);font-weight:700;line-height:.95;
+  font-size:clamp(110px,38vw,190px);font-variant-numeric:tabular-nums;
+  display:flex;justify-content:center;align-items:baseline;gap:8px;margin:4px 0 6px;
+}
+.num small{font-size:.26em;font-weight:500;color:var(--muted)}
+.sub{font-size:15px;color:var(--muted);min-height:1.4em}
+.flag{position:absolute;top:14px;left:16px;width:22px;height:30px}
+
+button.main{
+  font:700 22px var(--display);letter-spacing:.04em;text-transform:uppercase;
+  width:100%;min-height:64px;border-radius:14px;border:2px solid var(--green);
+  background:var(--green);color:#fff;cursor:pointer;padding:10px 16px;
+}
+button.main:disabled{opacity:.6;cursor:default}
+button.main.alt{background:var(--card);color:var(--ink);border-color:var(--ink)}
+button:focus-visible,select:focus-visible{outline:3px solid var(--flag);outline-offset:2px}
+
+.save{display:flex;gap:10px}
+.save select{
+  flex:1 1 40%;min-width:0;min-height:64px;border-radius:14px;border:2px solid var(--ink);
+  background:var(--card);color:var(--ink);font:500 17px var(--body);padding:0 12px;
+}
+.save button{flex:1 1 60%}
+[hidden]{display:none!important}
+
+.msg{
+  border-left:5px solid var(--bad);background:var(--card);padding:12px 14px;border-radius:6px;
+  font-size:15px;
+}
+.steps{margin:0;padding-left:22px;color:var(--muted);font-size:15px;display:flex;flex-direction:column;gap:4px}
+
+section h2{
+  font:700 16px var(--display);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px;
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+section h2 span{font:500 14px var(--body);letter-spacing:0;text-transform:none;color:var(--muted)}
+ul.log{list-style:none;margin:0;padding:0;border-top:2px solid var(--ink)}
+ul.log li{
+  display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--line);
+}
+.log .d{font:700 28px var(--display);font-variant-numeric:tabular-nums;min-width:3.2ch;text-align:right}
+.log .c{font-weight:500;overflow-wrap:anywhere}
+.log .t{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.log button{
+  border:0;background:transparent;color:var(--muted);font-size:22px;line-height:1;
+  width:40px;height:40px;border-radius:8px;cursor:pointer;
+}
+.empty{color:var(--muted);font-size:15px;margin:8px 0 0}
+footer{color:var(--muted);font-size:13px;margin-top:auto}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Distance au trou</h1>
+    <div class="units" role="group" aria-label="Unité">
+      <button type="button" id="unit-m" aria-pressed="true">m</button>
+      <button type="button" id="unit-yd" aria-pressed="false">yd</button>
+    </div>
+  </header>
+
+  <div class="gps" id="gps" data-state="off" role="status">
+    <span class="dot"></span><span id="gps-text">GPS en attente</span>
+  </div>
+
+  <div class="readout">
+    <svg class="flag" viewBox="0 0 22 30" aria-hidden="true">
+      <line x1="3" y1="1" x2="3" y2="29" stroke="#12301f" stroke-width="2" stroke-linecap="round"/>
+      <path d="M4 2 L20 7 L4 13 Z" fill="#c8321f"/>
+    </svg>
+    <div class="label" id="label">Trou non placé</div>
+    <div class="num" aria-live="off"><span id="dist">–</span><small id="unit-label">m</small></div>
+    <div class="sub" id="sub">Posez-vous au drapeau pour commencer.</div>
+  </div>
+
+  <div class="msg" id="msg" role="alert" hidden></div>
+
+  <button type="button" class="main" id="btn-hole">Placer le trou ici</button>
+
+  <div class="save" id="save-row" hidden>
+    <select id="club" aria-label="Club">
+      <option value="">Sans club</option>
+      <option>Driver</option><option>Bois 3</option><option>Bois 5</option><option>Hybride</option>
+      <option>Fer 4</option><option>Fer 5</option><option>Fer 6</option><option>Fer 7</option>
+      <option>Fer 8</option><option>Fer 9</option>
+      <option>Pitching wedge</option><option>Gap wedge</option><option>Sand wedge</option><option>Lob wedge</option>
+      <option>Putter</option>
+    </select>
+    <button type="button" class="main alt" id="btn-save">Noter la distance</button>
+  </div>
+
+  <ol class="steps" id="steps">
+    <li>Tenez-vous au trou et touchez « Placer le trou ici ».</li>
+    <li>Restez immobile 5 secondes, le temps de fixer la position.</li>
+    <li>Marchez : la distance se met à jour toute seule.</li>
+  </ol>
+
+  <section>
+    <h2>Distances notées <span id="count"></span></h2>
+    <ul class="log" id="log"></ul>
+    <p class="empty" id="empty">Rien pour l'instant. Notez une distance avant de jouer votre coup.</p>
+  </section>
+
+  <footer>Le GPS d'un téléphone est juste à 3–5 m près à ciel ouvert. L'écran reste allumé tant que la page est ouverte.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var YD = 1.09361, SAMPLE_MS = 5000, WALK = 2; // m/s, vitesse max supposée pour le lissage
+
+  var hole = null, f = null, watchId = null, sampling = null, unit = "m", log = [], wake = null, lastFix = 0;
+
+  function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  function metres(a, b) {
+    var R = 6371008.8, r = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function show(m) { return Math.round(unit === "m" ? m : m * YD); }
+
+  // Lissage : filtre de Kalman simple, pour que le chiffre ne saute pas à l'arrêt.
+  function smooth(lat, lon, acc, t) {
+    if (!f) { f = { lat: lat, lon: lon, v: acc * acc, t: t }; return; }
+    var dt = Math.max(0, (t - f.t) / 1000); f.t = t;
+    f.v += dt * WALK * WALK;
+    var k = f.v / (f.v + acc * acc);
+    f.lat += k * (lat - f.lat); f.lon += k * (lon - f.lon); f.v *= (1 - k);
+  }
+
+  function onFix(p) {
+    var acc = Math.max(p.coords.accuracy || 1, 1);
+    lastFix = Date.now();
+    smooth(p.coords.latitude, p.coords.longitude, acc, p.timestamp || lastFix);
+    hideMsg();
+    if (sampling) {
+      if (!sampling.start) sampling.start = lastFix;
+      sampling.pts.push({ lat: p.coords.latitude, lon: p.coords.longitude, acc: acc });
+    }
+    render(acc);
+  }
+
+  function onErr(e) {
+    var t = e.code === 1
+      ? "Localisation refusée. Autorisez la position pour cette page dans les réglages du navigateur, puis rechargez. La page doit être ouverte en https."
+      : "Pas de signal GPS. Placez-vous à ciel ouvert et vérifiez que la localisation du téléphone est activée.";
+    showMsg(t);
+    setGps("bad", e.code === 1 ? "Localisation refusée" : "Pas de signal");
+    if (e.code === 1) { stopSampling(); stopWatch(); }
+  }
+
+  function startWatch() {
+    if (watchId !== null) return true;
+    if (!("geolocation" in navigator)) { showMsg("Ce navigateur ne donne pas accès au GPS."); return false; }
+    setGps("warn", "Recherche du signal…");
+    watchId = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    keepAwake();
+    return true;
+  }
+  function stopWatch() { if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; } }
+
+  function keepAwake() {
+    if (!("wakeLock" in navigator) || wake) return;
+    navigator.wakeLock.request("screen").then(function (w) {
+      wake = w; w.addEventListener("release", function () { wake = null; });
+    }).catch(function () {});
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && watchId !== null) keepAwake();
+  });
+
+  function placeHole() {
+    if (!startWatch()) return;
+    sampling = { pts: [], start: null, asked: Date.now() };
+    $("btn-hole").disabled = true;
+    sampling.timer = setInterval(tick, 250);
+    tick();
+  }
+  function tick() {
+    if (!sampling) return;
+    var now = Date.now();
+    if (!sampling.start) {
+      $("btn-hole").textContent = "Recherche du GPS…";
+      if (now - sampling.asked > 30000) {
+        stopSampling();
+        showMsg("Aucune position reçue en 30 secondes. Placez-vous à ciel ouvert et réessayez.");
+      }
+      return;
+    }
+    var left = SAMPLE_MS - (now - sampling.start);
+    if (left > 0) { $("btn-hole").textContent = "Ne bougez pas… " + Math.ceil(left / 1000); return; }
+    // Moyenne des positions, pondérée par leur précision.
+    var sw = 0, la = 0, lo = 0, best = Infinity;
+    sampling.pts.forEach(function (s) {
+      var w = 1 / (s.acc * s.acc); sw += w; la += s.lat * w; lo += s.lon * w; best = Math.min(best, s.acc);
+    });
+    hole = { lat: la / sw, lon: lo / sw, acc: best };
+    store("golf.hole", hole);
+    stopSampling();
+    render();
+  }
+  function stopSampling() {
+    if (sampling) clearInterval(sampling.timer);
+    sampling = null;
+    $("btn-hole").disabled = false;
+    render();
+  }
+
+  function setGps(state, text) { $("gps").dataset.state = state; $("gps-text").textContent = text; }
+  function showMsg(t) { $("msg").textContent = t; $("msg").hidden = false; }
+  function hideMsg() { $("msg").hidden = true; }
+
+  function current() { return hole && f ? metres(hole, f) : null; }
+
+  function render(acc) {
+    if (acc) {
+      var a = Math.round(acc);
+      setGps(a <= 8 ? "ok" : a <= 20 ? "warn" : "bad",
+        "GPS précis à ± " + a + " m" + (a > 20 ? " : signal faible" : ""));
+    }
+    $("unit-label").textContent = unit;
+    var d = current();
+    if (!hole) {
+      $("label").textContent = "Trou non placé";
+      $("dist").textContent = "–";
+      $("sub").textContent = "Posez-vous au drapeau pour commencer.";
+    } else if (d === null) {
+      $("label").textContent = "Distance au trou";
+      $("dist").textContent = "–";
+      $("sub").textContent = "Trou en mémoire. Touchez « Reprendre la mesure ».";
+    } else {
+      $("label").textContent = "Distance au trou";
+      $("dist").textContent = show(d);
+      var other = unit === "m" ? Math.round(d * YD) + " yd" : Math.round(d) + " m";
+      var err = Math.round(Math.sqrt(hole.acc * hole.acc + f.v));
+      $("sub").textContent = other + " · marge ± " + Math.max(err, 1) + " m";
+    }
+    if (!sampling) {
+      $("btn-hole").textContent = !hole ? "Placer le trou ici" : (watchId === null ? "Reprendre la mesure" : "Nouveau trou ici");
+      $("btn-hole").className = "main" + (hole && watchId !== null ? " alt" : "");
+    }
+    $("save-row").hidden = !(hole && d !== null);
+    $("steps").hidden = !!hole;
+  }
+
+  function renderLog() {
+    var ul = $("log"); ul.textContent = "";
+    log.forEach(function (e, i) {
+      var li = document.createElement("li");
+      var d = document.createElement("span"); d.className = "d"; d.textContent = show(e.m);
+      var c = document.createElement("span"); c.className = "c"; c.textContent = (e.club || "Sans club") + " · " + unit;
+      var t = document.createElement("span"); t.className = "t";
+      t.textContent = new Date(e.t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      var x = document.createElement("button"); x.type = "button"; x.textContent = "×";
+      x.setAttribute("aria-label", "Supprimer " + show(e.m) + " " + unit);
+      x.addEventListener("click", function () { log.splice(i, 1); store("golf.log", log); renderLog(); });
+      li.append(d, c, t, x); ul.appendChild(li);
+    });
+    $("empty").hidden = log.length > 0;
+    $("count").textContent = log.length ? log.length + (log.length > 1 ? " coups" : " coup") : "";
+  }
+
+  function setUnit(u) {
+    unit = u; store("golf.unit", u);
+    $("unit-m").setAttribute("aria-pressed", String(u === "m"));
+    $("unit-yd").setAttribute("aria-pressed", String(u === "yd"));
+    render(); renderLog();
+  }
+
+  $("btn-hole").addEventListener("click", function () {
+    if (hole && watchId === null) { if (startWatch()) render(); return; }
+    placeHole();
+  });
+  $("btn-save").addEventListener("click", function () {
+    var d = current(); if (d === null) return;
+    log.unshift({ m: d, club: $("club").value, t: Date.now() });
+    if (log.length > 200) log.length = 200;
+    store("golf.log", log); renderLog();
+  });
+  $("unit-m").addEventListener("click", function () { setUnit("m"); });
+  $("unit-yd").addEventListener("click", function () { setUnit("yd"); });
+
+  // Signale un GPS muet (tunnel d'arbres, téléphone en veille…).
+  setInterval(function () {
+    if (watchId !== null && lastFix && Date.now() - lastFix > 15000) setGps("bad", "Signal perdu, distance figée");
+  }, 3000);
+
+  hole = load("golf.hole", null);
+  log = load("golf.log", []);
+  if (!Array.isArray(log)) log = [];
+  setUnit(load("golf.unit", "m") === "yd" ? "yd" : "m");
+})();
+</script>
+</body>
+</html>
